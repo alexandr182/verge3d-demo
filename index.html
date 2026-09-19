@@ -1,7 +1,84 @@
-﻿<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Redirecting...</title>
-<meta http-equiv="refresh" content="0; url=player/player.html?load=../applications/verge3d_test/Untitled.gltf">
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Демо 3D-сцена (model-viewer)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #1a1a1a; font-family: sans-serif; }
+  model-viewer { width: 100%; height: 100vh; }
+  .panel {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 14px; z-index: 10;
+  }
+  .objects {
+    display: flex; gap: 8px;
+  }
+  .objects button {
+    padding: 8px 14px; border-radius: 20px; border: 2px solid #fff; background: rgba(0,0,0,0.5);
+    color: #fff; font-size: 13px; cursor: pointer;
+  }
+  .objects button.active {
+    background: #fff; color: #111; font-weight: bold;
+  }
+  .colors {
+    display: flex; gap: 12px;
+  }
+  .colors button {
+    width: 44px; height: 44px; border-radius: 50%; border: 2px solid #fff;
+    cursor: pointer;
+  }
+  .title {
+    position: fixed; top: 16px; left: 16px; color: #fff; font-size: 14px; opacity: 0.7;
+  }
+</style>
 </head>
-<body>Loading Verge3D scene...</body>
+<body>
+
+<div class="title">Демо-сцена — куб (без Verge3D, чистый glTF + model-viewer)</div>
+
+<model-viewer id="viewer"
+  src="Untitled.gltf"
+  camera-controls
+  auto-rotate
+  shadow-intensity="1"
+  exposure="1"
+  ar>
+</model-viewer>
+
+<div class="panel">
+  <div class="objects" id="objectButtons">
+    <button class="active" onclick="selectObject(0, this)">Объект 1</button>
+    <button onclick="selectObject(1, this)">Объект 2</button>
+    <button onclick="selectObject(2, this)">Объект 3 (пол)</button>
+  </div>
+  <div class="colors">
+    <button style="background:#c0392b" onclick="setColor(0.75,0.1,0.1)" title="Красный"></button>
+    <button style="background:#2980b9" onclick="setColor(0.1,0.3,0.75)" title="Синий"></button>
+    <button style="background:#27ae60" onclick="setColor(0.1,0.6,0.2)" title="Зелёный"></button>
+    <button style="background:#f1c40f" onclick="setColor(0.9,0.75,0.1)" title="Жёлтый"></button>
+    <button style="background:#111" onclick="setColor(0.05,0.05,0.05)" title="Чёрный"></button>
+    <button style="background:#fff" onclick="setColor(0.95,0.95,0.95)" title="Белый"></button>
+  </div>
+</div>
+
+<script>
+  let activeIndex = 0; // выбранный объект (индекс материала)
+
+  function selectObject(index, btn) {
+    activeIndex = index;
+    document.querySelectorAll('#objectButtons button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function setColor(r, g, b) {
+    const viewer = document.getElementById('viewer');
+    const materials = viewer.model.materials;
+    // красим только выбранный сейчас объект/материал
+    materials[activeIndex].pbrMetallicRoughness.setBaseColorFactor([r, g, b, 1]);
+  }
+</script>
+
+</body>
 </html>
