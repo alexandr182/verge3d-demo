@@ -9,8 +9,12 @@
   html, body { margin: 0; padding: 0; height: 100%; background: #1a1a1a; font-family: sans-serif; }
   model-viewer { width: 100%; height: 100vh; }
   .panel {
-    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-    display: flex; flex-direction: column; align-items: center; gap: 14px; z-index: 10;
+    position: fixed; bottom: 20px; left: 20px; right: 20px;
+    display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+    gap: 14px; z-index: 10; flex-wrap: wrap;
+  }
+  .rightGroup {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 14px;
   }
   .objects {
     display: flex; gap: 8px;
@@ -39,26 +43,31 @@
 <div class="title">Демо-сцена — куб (без Verge3D, чистый glTF + model-viewer)</div>
 
 <model-viewer id="viewer"
-  src="Untitled.gltf"
+  src="Untitled_std.gltf"
   camera-controls
+  animation-name="1+Action.001"
   shadow-intensity="1"
   exposure="1"
   ar>
 </model-viewer>
 
 <div class="panel">
-  <div class="objects" id="objectButtons">
-    <button class="active" onclick="selectObject(0, this)">Объект 1</button>
-    <button onclick="selectObject(1, this)">Объект 2</button>
-    <button onclick="selectObject(2, this)">Объект 3 (пол)</button>
-  </div>
-  <div class="colors">
-    <button style="background:#c0392b" onclick="setColor(0.75,0.1,0.1)" title="Красный"></button>
-    <button style="background:#2980b9" onclick="setColor(0.1,0.3,0.75)" title="Синий"></button>
-    <button style="background:#27ae60" onclick="setColor(0.1,0.6,0.2)" title="Зелёный"></button>
-    <button style="background:#f1c40f" onclick="setColor(0.9,0.75,0.1)" title="Жёлтый"></button>
-    <button style="background:#111" onclick="setColor(0.05,0.05,0.05)" title="Чёрный"></button>
-    <button style="background:#fff" onclick="setColor(0.95,0.95,0.95)" title="Белый"></button>
+  <button id="liftButton" onclick="toggleLift()" style="padding:10px 20px; border-radius:20px; border:2px solid #fff; background:rgba(0,0,0,0.5); color:#fff; cursor:pointer;">⬆ Поднять объект</button>
+
+  <div class="rightGroup">
+    <div class="objects" id="objectButtons">
+      <button class="active" onclick="selectObject(0, this)">Объект 1</button>
+      <button onclick="selectObject(1, this)">Объект 2</button>
+      <button onclick="selectObject(2, this)">Объект 3 (пол)</button>
+    </div>
+    <div class="colors">
+      <button style="background:#c0392b" onclick="setColor(0.75,0.1,0.1)" title="Красный"></button>
+      <button style="background:#2980b9" onclick="setColor(0.1,0.3,0.75)" title="Синий"></button>
+      <button style="background:#27ae60" onclick="setColor(0.1,0.6,0.2)" title="Зелёный"></button>
+      <button style="background:#f1c40f" onclick="setColor(0.9,0.75,0.1)" title="Жёлтый"></button>
+      <button style="background:#111" onclick="setColor(0.05,0.05,0.05)" title="Чёрный"></button>
+      <button style="background:#fff" onclick="setColor(0.95,0.95,0.95)" title="Белый"></button>
+    </div>
   </div>
 </div>
 
@@ -76,6 +85,61 @@
     const materials = viewer.model.materials;
     // красим только выбранный сейчас объект/материал
     materials[activeIndex].pbrMetallicRoughness.setBaseColorFactor([r, g, b, 1]);
+  }
+
+  // Кнопка поднять/опустить — ручная плавная интерполяция времени анимации
+  let objectIsUp = false;
+  let animDuration = 0;
+  let isAnimating = false;
+  const liftViewer = document.getElementById('viewer');
+  const liftBtn = document.getElementById('liftButton');
+
+  liftViewer.addEventListener('load', () => {
+    animDuration = liftViewer.duration || 1;
+  });
+
+function animateTo(fromTime, toTime, onDone) {
+  const durationMs = Math.max(Math.abs(toTime - fromTime), 0.05) * 1000;
+  const start = performance.now();
+  liftViewer.pause();
+  function step(now) {
+    const t = Math.min((now - start) / durationMs, 1);
+    const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    liftViewer.currentTime = fromTime + (toTime - fromTime) * eased;
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      // небольшой отступ от самого конца клипа, чтобы избежать
+      // сброса анимации на 0 из-за зацикливания движка ровно на границе
+      const eps = 0.02;
+      const safeTime = toTime > 0 ? Math.max(0, toTime - eps) : 0;
+      liftViewer.currentTime = safeTime;
+      if (onDone) onDone();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+  function toggleLift() {
+    if (isAnimating) return;
+    const duration = animDuration || liftViewer.duration || 1;
+    isAnimating = true;
+    liftBtn.disabled = true;
+
+    if (!objectIsUp) {
+      liftBtn.textContent = '⬇ Опустить объект';
+      animateTo(0, duration, () => {
+        isAnimating = false;
+        liftBtn.disabled = false;
+      });
+    } else {
+      liftBtn.textContent = '⬆ Поднять объект';
+      animateTo(duration, 0, () => {
+        isAnimating = false;
+        liftBtn.disabled = false;
+      });
+    }
+    objectIsUp = !objectIsUp;
   }
 </script>
 
