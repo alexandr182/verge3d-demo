@@ -92,6 +92,12 @@ const showFatalError = (msg) => {
 
 log('navigator.gpu (WebGPU API присутствует в браузере): ' + (!!navigator.gpu));
 
+// Грубая, но рабочая эвристика "слабый/мобильный GPU" — используем, чтобы срезать
+// самые дорогие настройки (разрешение теней, блюр, pixel ratio) именно там, где
+// не хватает производительности, не трогая качество на десктопе.
+const IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+log('IS_MOBILE: ' + IS_MOBILE);
+
 // ---------- базовая сцена ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
@@ -102,7 +108,7 @@ camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGPURenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, IS_MOBILE ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap; // только этот тип реально учитывает shadow.radius в WebGPURenderer
 document.body.appendChild(renderer.domElement);
@@ -247,11 +253,16 @@ loader.load(
         lightsFound++;
         obj.castShadow = true;
         if (obj.shadow) {
-          obj.shadow.mapSize.set(1096, 1096); // было 2048 — подняли плотность текселей, т.к. frustum подгоняется под всю сцену
+          // VSM размывает тень ДВУМЯ отдельными полноэкранными проходами поверх карты
+          // теней (вертикальный + горизонтальный блюр, каждый — blurSamples выборок на
+          // текселе), и на мобильном GPU это самая тяжёлая часть сцены — на телефоне
+          // просело до ~23 FPS именно из-за этого. Снижаем и разрешение карты, и число
+          // выборок блюра на мобильных, оставляя desktop-качество там, где GPU тянет.
+          obj.shadow.mapSize.set(IS_MOBILE ? 512 : 1096, IS_MOBILE ? 512 : 1096);
           obj.shadow.bias = -0.01;     // подтверждено экспериментально: acne на буквах (внутренняя дуга "S", перегиб "E") требовала заметно больше, чем -0.006
           obj.shadow.normalBias = 0.01; // тоже пришлось поднять сильнее — эти два параметра работают вместе против acne на резких изгибах геометрии текста
-          obj.shadow.radius = 10;       // сила размытия — чем больше, тем мягче тень (работает только с VSMShadowMap)
-          obj.shadow.blurSamples = 10;  // качество размытия — больше выборок = более гладкий градиент, но медленнее
+          obj.shadow.radius = IS_MOBILE ? 4 : 10;        // сила размытия — чем больше, тем мягче тень (работает только с VSMShadowMap)
+          obj.shadow.blurSamples = IS_MOBILE ? 3 : 10;   // качество размытия — больше выборок = более гладкий градиент, но медленнее (x2 прохода!)
         }
         if (obj.isDirectionalLight) {
           directionalLightsToFit.push(obj);
