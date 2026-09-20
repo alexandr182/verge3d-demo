@@ -159,6 +159,42 @@ renderer.domElement.addEventListener('wheel', (e) => {
   zoomTargetDistance = THREE.MathUtils.clamp(zoomTargetDistance * factor, ZOOM_MIN_DISTANCE, ZOOM_MAX_DISTANCE);
 }, { passive: false });
 
+// ---------- pinch-to-zoom на тачскрине ----------
+// controls.enableZoom = false выше выключил не только зум колесом (сделан вручную,
+// см. wheel-обработчик), но заодно и встроенный pinch-zoom OrbitControls на тачскрине —
+// это одна и та же настройка на оба способа. Поэтому щипок двумя пальцами делаем тоже
+// вручную, по той же схеме плавного зума: расстояние между пальцами двигает ту же
+// "целевую" дистанцию zoomTargetDistance, что и колесо мыши.
+const PINCH_SENSITIVITY = 2.2; // больше — сильнее реакция на изменение расстояния между пальцами
+let pinchStartDistance = null;
+let pinchStartZoom = null;
+
+function getTouchDistance(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy);
+}
+
+renderer.domElement.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    pinchStartDistance = getTouchDistance(e.touches);
+    pinchStartZoom = zoomTargetDistance;
+  }
+}, { passive: true });
+
+renderer.domElement.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2 && pinchStartDistance) {
+    e.preventDefault(); // не даём странице скроллиться/зумиться целиком, пока крутим сцену
+    const currentDistance = getTouchDistance(e.touches);
+    const factor = Math.exp((pinchStartDistance - currentDistance) / pinchStartDistance * PINCH_SENSITIVITY);
+    zoomTargetDistance = THREE.MathUtils.clamp(pinchStartZoom * factor, ZOOM_MIN_DISTANCE, ZOOM_MAX_DISTANCE);
+  }
+}, { passive: false });
+
+renderer.domElement.addEventListener('touchend', (e) => {
+  if (e.touches.length < 2) pinchStartDistance = null;
+}, { passive: true });
+
 function updateSmoothZoom() {
   zoomDistance += (zoomTargetDistance - zoomDistance) * ZOOM_DAMPING;
   const dir = camera.position.clone().sub(controls.target).normalize();
