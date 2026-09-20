@@ -2,155 +2,307 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>Демо 3D-сцена (model-viewer)</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<title>WebGPU Тест</title>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; background: #1a1a1a; font-family: sans-serif; }
-  model-viewer { width: 100%; height: 100vh; }
-  .panel {
-    position: fixed; bottom: 20px; left: 20px; right: 20px;
-    display: flex; flex-direction: row; align-items: center; justify-content: space-between;
-    gap: 14px; z-index: 10; flex-wrap: wrap;
+  html, body { margin: 0; padding: 0; height: 100%; background: #222; }
+  canvas { display: block; }
+  #status {
+    display: none; /* отладочная панель скрыта; лог по-прежнему пишется в консоль браузера (F12) */
   }
-  .rightGroup {
-    display: flex; flex-direction: column; align-items: flex-end; gap: 14px;
+  #fps {
+    position: fixed; top: 10px; right: 10px; color: #0f0; background: rgba(0,0,0,0.6);
+    padding: 6px 10px; font-family: monospace; font-size: 14px; z-index: 10; border-radius: 4px;  
   }
-  .objects {
-    display: flex; gap: 8px;
+  #colorPanel {
+    position: fixed; bottom: 16px; left: 16px; z-index: 10;
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 6px;
+    font-family: sans-serif; color: #fff; font-size: 13px;
   }
-  .objects button {
-    padding: 8px 14px; border-radius: 20px; border: 2px solid #fff; background: rgba(0,0,0,0.5);
-    color: #fff; font-size: 13px; cursor: pointer;
-  }
-  .objects button.active {
-    background: #fff; color: #111; font-weight: bold;
-  }
-  .colors {
-    display: flex; gap: 12px;
-  }
-  .colors button {
-    width: 44px; height: 44px; border-radius: 50%; border: 2px solid #fff;
-    cursor: pointer;
-  }
-  .title {
-    position: fixed; top: 16px; left: 16px; color: #fff; font-size: 14px; opacity: 0.7;
+  #colorPicker {
+    width: 40px; height: 40px; border: none; border-radius: 6px; padding: 0;
+    background: none; cursor: pointer;
   }
 </style>
 </head>
-<body>
-
-<div class="title">Демо-сцена — куб (без Verge3D, чистый glTF + model-viewer)</div>
-
-<model-viewer id="viewer"
-  src="Untitled_std.gltf"
-  camera-controls
-  animation-name="1+Action.001"
-  shadow-intensity="1"
-  exposure="1"
-  ar>
-</model-viewer>
-
-<div class="panel">
-  <button id="liftButton" onclick="toggleLift()" style="padding:10px 20px; border-radius:20px; border:2px solid #fff; background:rgba(0,0,0,0.5); color:#fff; cursor:pointer;">⬆ Поднять объект</button>
-
-  <div class="rightGroup">
-    <div class="objects" id="objectButtons">
-      <button class="active" onclick="selectObject(0, this)">Объект 1</button>
-      <button onclick="selectObject(1, this)">Объект 2</button>
-      <button onclick="selectObject(2, this)">Объект 3 (пол)</button>
-    </div>
-    <div class="colors">
-      <button style="background:#c0392b" onclick="setColor(0.75,0.1,0.1)" title="Красный"></button>
-      <button style="background:#2980b9" onclick="setColor(0.1,0.3,0.75)" title="Синий"></button>
-      <button style="background:#27ae60" onclick="setColor(0.1,0.6,0.2)" title="Зелёный"></button>
-      <button style="background:#f1c40f" onclick="setColor(0.9,0.75,0.1)" title="Жёлтый"></button>
-      <button style="background:#111" onclick="setColor(0.05,0.05,0.05)" title="Чёрный"></button>
-      <button style="background:#fff" onclick="setColor(0.95,0.95,0.95)" title="Белый"></button>
-    </div>
-  </div>
+<div id="status">Инициализация...</div>
+<div id="fps">FPS: --</div>
+<div id="colorPanel">
+  <label for="colorPicker">Cube Color:</label>
+  <input type="color" id="colorPicker" value="#8b2942">
 </div>
-
 <script>
-  let activeIndex = 0; // выбранный объект (индекс материала)
-
-  function selectObject(index, btn) {
-    activeIndex = index;
-    document.querySelectorAll('#objectButtons button').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-  }
-
-  function setColor(r, g, b) {
-    const viewer = document.getElementById('viewer');
-    const materials = viewer.model.materials;
-    // красим только выбранный сейчас объект/материал
-    materials[activeIndex].pbrMetallicRoughness.setBaseColorFactor([r, g, b, 1]);
-  }
-
-  // Кнопка поднять/опустить — ручная плавная интерполяция времени анимации
-  let objectIsUp = false;
-  let animDuration = 0;
-  let isAnimating = false;
-  const liftViewer = document.getElementById('viewer');
-  const liftBtn = document.getElementById('liftButton');
-
-  liftViewer.addEventListener('load', () => {
-    animDuration = liftViewer.duration || 1;
-  });
-
-  let animToken = 0;
-
-  function animateTo(fromTime, toTime, onDone) {
-    const myToken = ++animToken;
-    const durationMs = Math.max(Math.abs(toTime - fromTime), 0.05) * 1000;
-    const start = performance.now();
-    let unlocked = false;
-    liftViewer.pause();
-    function step(now) {
-      if (myToken !== animToken) return;
-      const t = Math.min((now - start) / durationMs, 1);
-      const eased = 1 - Math.pow(1 - t, 2);
-      liftViewer.currentTime = fromTime + (toTime - fromTime) * eased;
-
-      if (!unlocked && t >= 0.85) {
-        unlocked = true;
-        if (onDone) onDone();
-      }
-
-      if (t < 1) {
-        requestAnimationFrame(step);
-      } else {
-        const eps = 0.02;
-        const safeTime = toTime > 0 ? Math.max(0, toTime - eps) : 0;
-        liftViewer.currentTime = safeTime;
-        if (!unlocked && onDone) onDone();
-      }
-    }
-    requestAnimationFrame(step);
-  }
-
-  function toggleLift() {
-    if (isAnimating) return;
-    const duration = animDuration || liftViewer.duration || 1;
-    isAnimating = true;
-    liftBtn.disabled = true;
-
-    if (!objectIsUp) {
-      liftBtn.textContent = '⬇ Опустить объект';
-      animateTo(0, duration, () => {
-        isAnimating = false;
-        liftBtn.disabled = false;
-      });
-    } else {
-      liftBtn.textContent = '⬆ Поднять объект';
-      animateTo(duration, 0, () => {
-        isAnimating = false;
-        liftBtn.disabled = false;
-      });
-    }
-    objectIsUp = !objectIsUp;
-  }
+  // Имя объекта в Blender, цвет которого меняет панель выше — меняй ТОЛЬКО здесь,
+  // рядом с самой панелью, если объект переименуют в Blender.
+  window.COLOR_TARGET_MESH_NAME = 'CUBE';
 </script>
 
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.webgpu.js",
+    "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.webgpu.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
+
+const status = document.getElementById('status');
+const log = (msg) => { status.textContent += '\n' + msg; console.log(msg); };
+
+// ---------- базовая сцена ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(3, 2, 4);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGPURenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.VSMShadowMap; // только этот тип реально учитывает shadow.radius в WebGPURenderer
+document.body.appendChild(renderer.domElement);
+await renderer.init();
+log('Renderer initialized: ' + renderer.constructor.name);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 0);
+controls.enableDamping = true;
+
+// ---------- плавный (затухающий) зум ----------
+// OrbitControls применяет зум колесом мгновенно за один кадр (enableDamping
+// сглаживает только вращение/панораму — это особенность самой библиотеки,
+// не связана с WebGL/WebGPU), поэтому зум делаем вручную: колесо двигает
+// "целевую" дистанцию, а фактическая дистанция камеры каждый кадр
+// подтягивается к ней с затуханием — так же плавно, как вращение.
+controls.enableZoom = false;
+
+const ZOOM_MIN_DISTANCE = 1.5;
+const ZOOM_MAX_DISTANCE = 15;
+const ZOOM_DAMPING = 0.1;   // доля пути к цели за кадр
+const ZOOM_WHEEL_SENSITIVITY = 0.0015;
+
+let zoomDistance = camera.position.distanceTo(controls.target);
+let zoomTargetDistance = zoomDistance;
+
+renderer.domElement.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const factor = Math.exp(e.deltaY * ZOOM_WHEEL_SENSITIVITY);
+  zoomTargetDistance = THREE.MathUtils.clamp(zoomTargetDistance * factor, ZOOM_MIN_DISTANCE, ZOOM_MAX_DISTANCE);
+}, { passive: false });
+
+function updateSmoothZoom() {
+  zoomDistance += (zoomTargetDistance - zoomDistance) * ZOOM_DAMPING;
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  camera.position.copy(controls.target).addScaledVector(dir, zoomDistance);
+}
+
+// ---------- свет ----------
+// Небольшой fallback-свет на случай, если в glTF света не окажется
+// (например, забыли включить Include → Lights при экспорте из Blender)
+const fallbackAmbient = new THREE.AmbientLight(0xffffff, 0.3);
+scene.add(fallbackAmbient);
+
+// ---------- HDRI-окружение (forest.exr из Blender) ----------
+// Раньше одно и то же число (environmentIntensity) разом управляло и тем, насколько
+// HDRI ОСВЕЩАЕТ объекты, и тем, насколько сильно оно ОТРАЖАЕТСЯ на глянцевых
+// поверхностях — это два разных визуальных эффекта, разделяем на два независимых:
+const HDRI_LIGHT_INTENSITY = 0.1;      // сила освещения сцены от HDRI (scene.environmentIntensity)
+const HDRI_REFLECTION_INTENSITY = 1.0; // сила отражений HDRI на материалах (material.envMapIntensity)
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+new EXRLoader().load('forest.exr?v=' + Date.now(), (hdrTex) => {
+  hdrTex.mapping = THREE.EquirectangularReflectionMapping;
+  const envMap = pmrem.fromEquirectangular(hdrTex).texture;
+  scene.environment = envMap;
+  scene.environmentIntensity = HDRI_LIGHT_INTENSITY;
+  hdrTex.dispose();
+  pmrem.dispose();
+  log('HDRI environment loaded: forest.exr');
+}, undefined, (err) => {
+  log('HDRI LOAD ERROR: ' + (err.message || err));
+});
+
+// ---------- покраска объектов по имени ----------
+// Материалы мешей из glTF сохраняются сюда по имени объекта (заполняется при загрузке модели),
+// чтобы можно было менять цвет любого меша, вызвав функцию по его имени.
+const meshMaterials = {};
+
+// ---------- анимация "гирлянды" на слове TEST ----------
+// Повторяет анимацию из Blender: Mapping.Location.X сдвигался ступенчато
+// (Constant-интерполяция) по кадрам 0/18/36/54 при 24 fps и зациклен через
+// F-Curve modifier Cycles. Тут то же самое: 4 фиксированных сдвига текстуры
+// по 0.75 каждый, итого цикл 3с, дальше повторяется бесконечно.
+const GARLAND_STEP_SECONDS = 0.75;
+const GARLAND_OFFSETS = [0, 0.19520650804042816, 0.4320584237575531, 0.7494588494300842].reverse();
+const GARLAND_RUN_SECONDS = GARLAND_STEP_SECONDS * GARLAND_OFFSETS.length; // один проход, 3с
+const GARLAND_PAUSE_SECONDS = 2; // пауза на последнем цвете перед новым проходом
+const GARLAND_CYCLE_SECONDS = GARLAND_RUN_SECONDS + GARLAND_PAUSE_SECONDS;
+let garlandTexture = null;
+
+function updateGarland(elapsedSeconds) {
+  if (!garlandTexture) return;
+  const t = elapsedSeconds % GARLAND_CYCLE_SECONDS;
+  const idx = t < GARLAND_RUN_SECONDS
+    ? Math.floor(t / GARLAND_STEP_SECONDS)
+    : GARLAND_OFFSETS.length - 1; // во время паузы держим последний цвет прохода
+  garlandTexture.offset.x = GARLAND_OFFSETS[idx];
+}
+
+function setMeshColor(meshName, hexColor) {
+  const mat = meshMaterials[meshName];
+  if (!mat) {
+    log(`setMeshColor: меш "${meshName}" не найден`);
+    return;
+  }
+  mat.color.set(hexColor);
+}
+
+// ---------- загрузка модели из Blender ----------
+const MODEL_FILE = 'object.gltf'; // <-- имя файла, экспортированного из Blender
+
+const loader = new GLTFLoader();
+loader.load(
+  MODEL_FILE + '?v=' + Date.now(),
+  (gltf) => {
+    log('GLTF LOADED: ' + gltf.scene.children.map(c => c.name).join(', '));
+    let lightsFound = 0;
+    const directionalLightsToFit = [];
+    gltf.scene.traverse((obj) => {
+      if (obj.isMesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+        meshMaterials[obj.name] = obj.material; // сохраняем материал по имени объекта для setMeshColor()
+        if (obj.material && 'envMapIntensity' in obj.material) {
+          obj.material.envMapIntensity = HDRI_REFLECTION_INTENSITY; // независимо от силы освещения HDRI (см. выше)
+        }
+        if (obj.name === 'Text' && obj.material && obj.material.map) {
+          garlandTexture = obj.material.map;
+          garlandTexture.wrapS = THREE.RepeatWrapping;
+          garlandTexture.wrapT = THREE.RepeatWrapping;
+        }
+        const box = new THREE.Box3().setFromObject(obj);
+        const size = box.getSize(new THREE.Vector3());
+        log(`  ${obj.name}: pos=[${obj.getWorldPosition(new THREE.Vector3()).toArray().map(n=>n.toFixed(2))}] size=[${size.toArray().map(n=>n.toFixed(2))}] material=${obj.material?.type}`);
+      }
+      if (obj.isLight) {
+        lightsFound++;
+        obj.castShadow = true;
+        if (obj.shadow) {
+          obj.shadow.mapSize.set(1096, 1096); // было 2048 — подняли плотность текселей, т.к. frustum подгоняется под всю сцену
+          obj.shadow.bias = -0.01;     // подтверждено экспериментально: acne на буквах (внутренняя дуга "S", перегиб "E") требовала заметно больше, чем -0.006
+          obj.shadow.normalBias = 0.01; // тоже пришлось поднять сильнее — эти два параметра работают вместе против acne на резких изгибах геометрии текста
+          obj.shadow.radius = 10;       // сила размытия — чем больше, тем мягче тень (работает только с VSMShadowMap)
+          obj.shadow.blurSamples = 10;  // качество размытия — больше выборок = более гладкий градиент, но медленнее
+        }
+        if (obj.isDirectionalLight) {
+          directionalLightsToFit.push(obj);
+        }
+        const originalIntensity = obj.intensity;
+        if (obj.isDirectionalLight) {
+          // ВАЖНО: у Blender'овского glTF-экспортёра (io_scene_gltf2 5.1.20) для Sun-света
+          // Strength не передаётся в файл — там всегда фиксированное число (683), независимо
+          // от значения в Blender. Это подтверждено экспериментально (пробовали 3, 50, 1000 —
+          // экспортированная intensity не менялась). Поэтому яркость Sun задаём числом прямо
+          // здесь, в коде — направление/позиция света из Blender по-прежнему работают штатно.
+          obj.intensity = 4; // <-- меняй это число, чтобы регулировать яркость направленного света
+        } else {
+          // Point/Spot экспортируются корректно (Watts -> кандела, формула *683/(4π)),
+          // но для маленькой сцены получаются огромные числа — уменьшаем.
+          obj.intensity = originalIntensity / 3000;
+        }
+        log(`  LIGHT "${obj.name}" type=${obj.type} intensity=${originalIntensity.toFixed(0)} -> ${obj.intensity.toFixed(2)} pos=[${obj.getWorldPosition(new THREE.Vector3()).toArray().map(n=>n.toFixed(2))}]`);
+      }
+    });
+    log(lightsFound > 0 ? `Свет из Blender найден: ${lightsFound}` : 'Свет из Blender НЕ найден — используется fallback-ambient');
+    fallbackAmbient.intensity = lightsFound > 0 ? 0.1 : 0.3; // приглушаем заглушку, если реальный свет приехал
+    scene.add(gltf.scene);
+
+    // ---------- подгонка frustum теней под реальные размеры сцены ----------
+    // У DirectionalLight.shadow.camera фиксированный orthographic-frustum
+    // по умолчанию (-5..5 по X/Y, near/far 0.5..500), который не связан
+    // с размерами импортированной сцены — из-за этого тени обрезались/съезжали
+    // (пол 5.56x5.56 в него не помещался). Здесь считаем bounding box сцены
+    // и настраиваем frustum под него + центрируем target света на центре сцены.
+    //
+    // "Text" сознательно исключён из этого расчёта: он парит высоко над полом
+    // отдельно от куба/статуи и был выбросом, из-за которого frustum раздувался
+    // намного больше, чем нужно — плотность текселей карты теней на кубе и
+    // статуе падала, и на их границах лезли блочные артефакты (acne).
+    const shadowRelevantObjects = [];
+    gltf.scene.traverse((o) => { if (o.isMesh && o.name !== 'Text') shadowRelevantObjects.push(o); });
+    const sceneBox = new THREE.Box3();
+    for (const o of shadowRelevantObjects) sceneBox.expandByObject(o);
+    const sceneCenter = sceneBox.getCenter(new THREE.Vector3());
+    const sceneSize = sceneBox.getSize(new THREE.Vector3());
+    const sceneRadius = sceneSize.length() * 0.5;
+
+    for (const light of directionalLightsToFit) {
+      light.target.position.copy(sceneCenter);
+      scene.add(light.target);
+
+      const cam = light.shadow.camera;
+      cam.left = -sceneRadius;
+      cam.right = sceneRadius;
+      cam.top = sceneRadius;
+      cam.bottom = -sceneRadius;
+      cam.near = 0.1;
+      cam.far = sceneRadius * 4 + light.position.distanceTo(sceneCenter);
+      cam.updateProjectionMatrix();
+      log(`  Shadow frustum для "${light.name}" подогнан под сцену: radius=${sceneRadius.toFixed(2)} center=[${sceneCenter.toArray().map(n=>n.toFixed(2))}]`);
+    }
+  },
+  undefined,
+  (err) => {
+    log('GLTF LOAD ERROR: ' + (err.message || err));
+  }
+);
+
+// ---------- UI: цветовой круг (нативный color picker браузера) ----------
+document.getElementById('colorPicker').addEventListener('input', (e) => {
+  setMeshColor(window.COLOR_TARGET_MESH_NAME, e.target.value);
+});
+
+// ---------- resize ----------
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------- счётчик FPS ----------
+const fpsDiv = document.getElementById('fps');
+let fpsFrameCount = 0;
+let fpsLastTime = performance.now();
+
+function updateFPS() {
+  fpsFrameCount++;
+  const now = performance.now();
+  const elapsed = now - fpsLastTime;
+  if (elapsed >= 500) { // обновляем показания дважды в секунду
+    const fps = Math.round((fpsFrameCount * 1000) / elapsed);
+    fpsDiv.textContent = `FPS: ${fps}`;
+    fpsFrameCount = 0;
+    fpsLastTime = now;
+  }
+}
+
+// ---------- render loop ----------
+renderer.setAnimationLoop((now) => {
+  updateSmoothZoom();
+  updateGarland(now / 1000);
+  controls.update();
+  renderer.render(scene, camera);
+  updateFPS();
+});
+</script>
 </body>
 </html>
