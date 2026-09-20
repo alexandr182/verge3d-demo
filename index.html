@@ -10,6 +10,12 @@
   #status {
     display: none; /* отладочная панель скрыта; лог по-прежнему пишется в консоль браузера (F12) */
   }
+  #status.error {
+    display: block; /* но если инициализация упала — показываем причину прямо на экране, а не молчим серым фоном */
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    background: #300; color: #f88; font-family: monospace; font-size: 13px;
+    white-space: pre-wrap; padding: 12px; box-sizing: border-box;
+  }
   #fps {
     position: fixed; top: 10px; right: 10px; color: #0f0; background: rgba(0,0,0,0.6);
     padding: 6px 10px; font-family: monospace; font-size: 14px; z-index: 10; border-radius: 4px;  
@@ -56,6 +62,13 @@ import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
 
 const status = document.getElementById('status');
 const log = (msg) => { status.textContent += '\n' + msg; console.log(msg); };
+const showFatalError = (msg) => {
+  status.textContent = msg;
+  status.classList.add('error');
+  console.error(msg);
+};
+
+log('navigator.gpu (WebGPU API присутствует в браузере): ' + (!!navigator.gpu));
 
 // ---------- базовая сцена ----------
 const scene = new THREE.Scene();
@@ -71,7 +84,21 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap; // только этот тип реально учитывает shadow.radius в WebGPURenderer
 document.body.appendChild(renderer.domElement);
-await renderer.init();
+
+try {
+  await renderer.init();
+} catch (err) {
+  // Без этого try/catch на устройствах, где не поднимается ни WebGPU, ни WebGL2-фолбэк,
+  // страница просто зависала серым экраном без единого объяснения — счётчик FPS навсегда
+  // оставался "--", а причину было видно только через удалённый USB-дебаг (chrome://inspect).
+  showFatalError(
+    'Не удалось инициализировать рендерер (ни WebGPU, ни WebGL2-фолбэк).\n' +
+    'navigator.gpu: ' + (!!navigator.gpu) + '\n' +
+    'User-Agent: ' + navigator.userAgent + '\n\n' +
+    'Ошибка: ' + (err && err.message ? err.message : err)
+  );
+  throw err; // прерываем дальнейшую загрузку сцены — рендерить всё равно нечем
+}
 log('Renderer initialized: ' + renderer.constructor.name);
 
 const controls = new OrbitControls(camera, renderer.domElement);
