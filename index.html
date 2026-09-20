@@ -108,7 +108,15 @@ const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 10
 camera.position.set(3, 2, 4);
 camera.lookAt(0, 0, 0);
 
-const renderer = new THREE.WebGPURenderer({ antialias: true });
+// На мобильных принудительно используем WebGL2-бэкенд вместо настоящего WebGPU:
+// { forceWebGL: true } — штатный параметр three.js. Причина не в производительности
+// (в WebGL2 не обязательно быстрее) — WebGPU на Android пока обкатан заметно хуже
+// desktop-браузеров (даже когда navigator.gpu присутствует, сама реализация у
+// конкретного производителя/драйвера может быть сырой), а WebGL2 работает годами
+// и стабильно почти на любом устройстве — обмениваем возможный выигрыш WebGPU на
+// предсказуемость там, где стабильность важнее.
+const renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL: IS_MOBILE });
+log('forceWebGL: ' + IS_MOBILE);
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, IS_MOBILE ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
