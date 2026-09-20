@@ -41,6 +41,10 @@
     <input type="checkbox" id="shadowToggle" checked>
     Shadows
   </label>
+  <label for="hdriToggle" style="display:flex; align-items:center; gap:4px; margin-left:8px;">
+    <input type="checkbox" id="hdriToggle" checked>
+    HDRI
+  </label>
 </div>
 <script>
   // Обычный (не module) скрипт — выполняется даже если модульный скрипт ниже
@@ -214,12 +218,30 @@ scene.add(fallbackAmbient);
 const HDRI_LIGHT_INTENSITY = 0.1;      // сила освещения сцены от HDRI (scene.environmentIntensity)
 const HDRI_REFLECTION_INTENSITY = 1.0; // сила отражений HDRI на материалах (material.envMapIntensity)
 
+// ---------- кнопка включения/выключения HDRI ----------
+// envMapMaterials заполняется при загрузке модели (там же, где сейчас выставляется
+// envMapIntensity). Выключение — это просто обнуление обоих чисел выше на лету,
+// без пересборки шейдеров: сцена продолжает освещаться fallback-светом/directional light,
+// но перестаёт получать свет/отражения от картинки HDRI.
+const envMapMaterials = [];
+
+function setHDRIEnabled(enabled) {
+  scene.environmentIntensity = enabled ? HDRI_LIGHT_INTENSITY : 0;
+  for (const mat of envMapMaterials) {
+    mat.envMapIntensity = enabled ? HDRI_REFLECTION_INTENSITY : 0;
+  }
+}
+
+document.getElementById('hdriToggle').addEventListener('change', (e) => {
+  setHDRIEnabled(e.target.checked);
+});
+
 const pmrem = new THREE.PMREMGenerator(renderer);
 new EXRLoader().load('forest.exr?v=' + Date.now(), (hdrTex) => {
   hdrTex.mapping = THREE.EquirectangularReflectionMapping;
   const envMap = pmrem.fromEquirectangular(hdrTex).texture;
   scene.environment = envMap;
-  scene.environmentIntensity = HDRI_LIGHT_INTENSITY;
+  scene.environmentIntensity = document.getElementById('hdriToggle').checked ? HDRI_LIGHT_INTENSITY : 0;
   hdrTex.dispose();
   pmrem.dispose();
   log('HDRI environment loaded: forest.exr');
@@ -297,7 +319,9 @@ loader.load(
         obj.receiveShadow = true;
         meshMaterials[obj.name] = obj.material; // сохраняем материал по имени объекта для setMeshColor()
         if (obj.material && 'envMapIntensity' in obj.material) {
-          obj.material.envMapIntensity = HDRI_REFLECTION_INTENSITY; // независимо от силы освещения HDRI (см. выше)
+          envMapMaterials.push(obj.material);
+          const hdriOn = document.getElementById('hdriToggle').checked;
+          obj.material.envMapIntensity = hdriOn ? HDRI_REFLECTION_INTENSITY : 0; // независимо от силы освещения HDRI (см. выше)
         }
         if (obj.name === 'Text' && obj.material && obj.material.map) {
           garlandTexture = obj.material.map;
