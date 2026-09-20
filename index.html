@@ -98,27 +98,36 @@
     animDuration = liftViewer.duration || 1;
   });
 
-function animateTo(fromTime, toTime, onDone) {
-  const durationMs = Math.max(Math.abs(toTime - fromTime), 0.05) * 1000;
-  const start = performance.now();
-  liftViewer.pause();
-  function step(now) {
-    const t = Math.min((now - start) / durationMs, 1);
-    const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    liftViewer.currentTime = fromTime + (toTime - fromTime) * eased;
-    if (t < 1) {
-      requestAnimationFrame(step);
-    } else {
-      // небольшой отступ от самого конца клипа, чтобы избежать
-      // сброса анимации на 0 из-за зацикливания движка ровно на границе
-      const eps = 0.02;
-      const safeTime = toTime > 0 ? Math.max(0, toTime - eps) : 0;
-      liftViewer.currentTime = safeTime;
-      if (onDone) onDone();
+  let animToken = 0;
+
+  function animateTo(fromTime, toTime, onDone) {
+    const myToken = ++animToken;
+    const durationMs = Math.max(Math.abs(toTime - fromTime), 0.05) * 1000;
+    const start = performance.now();
+    let unlocked = false;
+    liftViewer.pause();
+    function step(now) {
+      if (myToken !== animToken) return;
+      const t = Math.min((now - start) / durationMs, 1);
+      const eased = 1 - Math.pow(1 - t, 2);
+      liftViewer.currentTime = fromTime + (toTime - fromTime) * eased;
+
+      if (!unlocked && t >= 0.85) {
+        unlocked = true;
+        if (onDone) onDone();
+      }
+
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        const eps = 0.02;
+        const safeTime = toTime > 0 ? Math.max(0, toTime - eps) : 0;
+        liftViewer.currentTime = safeTime;
+        if (!unlocked && onDone) onDone();
+      }
     }
+    requestAnimationFrame(step);
   }
-  requestAnimationFrame(step);
-}
 
   function toggleLift() {
     if (isAnimating) return;
