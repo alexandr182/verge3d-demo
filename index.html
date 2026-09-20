@@ -37,6 +37,10 @@
 <div id="colorPanel">
   <label for="colorPicker">Cube Color:</label>
   <input type="color" id="colorPicker" value="#8b2942">
+  <label for="shadowToggle" style="display:flex; align-items:center; gap:4px; margin-left:8px;">
+    <input type="checkbox" id="shadowToggle" checked>
+    Shadows
+  </label>
 </div>
 <script>
   // Обычный (не module) скрипт — выполняется даже если модульный скрипт ниже
@@ -192,6 +196,25 @@ new EXRLoader().load('forest.exr?v=' + Date.now(), (hdrTex) => {
 // чтобы можно было менять цвет любого меша, вызвав функцию по его имени.
 const meshMaterials = {};
 
+// ---------- кнопка включения/выключения теней ----------
+// Список источников света с тенью заполняется при загрузке модели (см. ниже).
+// Переключаем через shadow.intensity (0 = тень полностью прозрачна, не требует
+// пересборки шейдера — это обычный uniform, читается заново каждый кадр) и
+// shadow.autoUpdate (false = карта теней вообще не пересчитывается и не блюрится
+// каждый кадр — реальная экономия FPS, а не только визуальное скрытие).
+const shadowLights = [];
+
+function setShadowsEnabled(enabled) {
+  for (const light of shadowLights) {
+    light.shadow.intensity = enabled ? 1 : 0;
+    light.shadow.autoUpdate = enabled;
+  }
+}
+
+document.getElementById('shadowToggle').addEventListener('change', (e) => {
+  setShadowsEnabled(e.target.checked);
+});
+
 // ---------- анимация "гирлянды" на слове TEST ----------
 // Повторяет анимацию из Blender: Mapping.Location.X сдвигался ступенчато
 // (Constant-интерполяция) по кадрам 0/18/36/54 при 24 fps и зациклен через
@@ -252,6 +275,7 @@ loader.load(
       if (obj.isLight) {
         lightsFound++;
         obj.castShadow = true;
+        shadowLights.push(obj);
         if (obj.shadow) {
           // VSM размывает тень ДВУМЯ отдельными полноэкранными проходами поверх карты
           // теней (вертикальный + горизонтальный блюр, каждый — blurSamples выборок на
