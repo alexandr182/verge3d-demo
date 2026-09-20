@@ -8,13 +8,7 @@
   html, body { margin: 0; padding: 0; height: 100%; background: #222; }
   canvas { display: block; }
   #status {
-    display: none; /* отладочная панель скрыта; лог по-прежнему пишется в консоль браузера (F12) */
-  }
-  #status.error {
-    display: block; /* но если инициализация упала — показываем причину прямо на экране, а не молчим серым фоном */
-    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
-    background: #300; color: #f88; font-family: monospace; font-size: 13px;
-    white-space: pre-wrap; padding: 12px; box-sizing: border-box;
+    display: none; /* отладочная панель скрыта; лог (включая ошибки) по-прежнему пишется в консоль браузера (F12) */
   }
   #fps {
     position: fixed; top: 10px; right: 10px; color: #0f0; background: rgba(0,0,0,0.6);
