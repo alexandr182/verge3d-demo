@@ -39,6 +39,28 @@
   <input type="color" id="colorPicker" value="#8b2942">
 </div>
 <script>
+  // Обычный (не module) скрипт — выполняется даже если модульный скрипт ниже
+  // не смог загрузиться/распарситься вообще (например, CDN с three.js не
+  // ответил на мобильной сети, или браузер не потянул синтаксис) — раньше
+  // в таком случае страница просто молча оставалась серой без единого следа
+  // причины. Теперь любая ошибка — сетевая, синтаксическая, необработанный
+  // reject — покажется прямо на экране красным баннером.
+  function showBootError(source, msg) {
+    var el = document.getElementById('status');
+    el.textContent += '\n[' + source + '] ' + msg;
+    el.classList.add('error');
+  }
+  window.addEventListener('error', function (e) {
+    showBootError('window.onerror', (e.message || 'Unknown error') + (e.filename ? (' @ ' + e.filename + ':' + e.lineno) : ''));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var reason = e.reason;
+    showBootError('unhandledrejection', reason && reason.message ? reason.message : String(reason));
+  });
+  document.getElementById('status').textContent =
+    'Загрузка... (User-Agent: ' + navigator.userAgent + ', navigator.gpu: ' + (!!navigator.gpu) + ')';
+</script>
+<script>
   // Имя объекта в Blender, цвет которого меняет панель выше — меняй ТОЛЬКО здесь,
   // рядом с самой панелью, если объект переименуют в Blender.
   window.COLOR_TARGET_MESH_NAME = 'CUBE';
